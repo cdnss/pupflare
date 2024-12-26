@@ -29,7 +29,7 @@ const responseHeadersToRemove = ["Accept-Ranges", "Content-Length", "Keep-Alive"
     const browser = await puppeteer.launch(options);
     app.use(async ctx => {
         var tt = "https://doujindesu.tv"
-        if (1 = 1) {
+        if (1 > 0) {
             const url = tt + ctx.url //decodeURIComponent(ctx.url.replace("/?url=", ""));
             console.log(ctx.url)
             if (process.env.DEBUG) {
