@@ -14,5 +14,6 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm install
 COPY . .
-EXPOSE 3000
-CMD [ "npm", "start" ]
+EXPOSE 5000
+# Replace the original CMD with the desired command
+CMD ["sh", "-c", "CHALLENGE_MATCH=\"please wait\" npm start"]
