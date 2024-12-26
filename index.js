@@ -28,8 +28,9 @@ const responseHeadersToRemove = ["Accept-Ranges", "Content-Length", "Keep-Alive"
         options.args.push(`--proxy-server=${process.env.PUPPETEER_PROXY}`);
     const browser = await puppeteer.launch(options);
     app.use(async ctx => {
-        if (ctx.url) {
-            const url = decodeURIComponent(ctx.url.replace("/?url=", ""));
+        var tt = "https://doujindesu.tv"
+        if (1 = 1) {
+            const url = tt + ctx.url //decodeURIComponent(ctx.url.replace("/?url=", ""));
             console.log(ctx.url)
             if (process.env.DEBUG) {
                 console.log(`[DEBUG] URL: ${url}`);
