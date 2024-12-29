@@ -1,137 +1,158 @@
-const puppeteer = require('puppeteer-extra');
-const StealthPlugin = require('puppeteer-extra-plugin-stealth');
-puppeteer.use(StealthPlugin());
-const Koa = require('koa');
-const bodyParser = require('koa-bodyparser');
-const app = new Koa();
-app.use(bodyParser());
-const jsesc = require('jsesc');
 
-const requestHeadersToRemove = [
-    "host", "user-agent", "accept-encoding", "content-length",
-    "forwarded", "x-forwarded-proto", "x-forwarded-for", "x-cloud-trace-context"
-];
-const responseHeadersToRemove = ["Accept-Ranges", "Content-Length", "Keep-Alive", "Connection", "content-encoding", "set-cookie"];
+import { load } from "cheerio";
 
-(async () => {
-    let options = {
-        headless: "new",
-        args: ['--no-sandbox', '--disable-setuid-sandbox']
-    };
-    if (process.env.PUPPETEER_SKIP_CHROMIUM_DOWNLOAD)
-        options.executablePath = '/usr/bin/chromium-browser';
-    if (process.env.PUPPETEER_HEADFUL)
-        options.headless = false;
-    if (process.env.PUPPETEER_USERDATADIR)
-        options.userDataDir = process.env.PUPPETEER_USERDATADIR;
-    if (process.env.PUPPETEER_PROXY)
-        options.args.push(`--proxy-server=${process.env.PUPPETEER_PROXY}`);
-    const browser = await puppeteer.launch(options);
-    app.use(async ctx => {
-        var tt = "https://doujindesu.tv"
-        if (1 > 0) {
-            const url = tt + ctx.url //decodeURIComponent(ctx.url.replace("/?url=", ""));
-            console.log(ctx.url)
-            if (process.env.DEBUG) {
-                console.log(`[DEBUG] URL: ${url}`);
-            }
-            let responseBody;
-            let responseData;
-            let responseHeaders;
-            const page = await browser.newPage();
+// eslint-disable-next-line no-restricted-globals
+addEventListener("fetch", (event) => {
+  event.respondWith(handleRequest(event.request));
+});
 
-            await page.removeAllListeners('request');
-            await page.setRequestInterception(true);
-            let requestHeaders = ctx.headers;
-            requestHeadersToRemove.forEach(header => {
-                delete requestHeaders[header];
-            });
-            page.on('request', (request) => {
-                requestHeaders = Object.assign({}, request.headers(), requestHeaders);
-                if (process.env.DEBUG) {
-                    console.log(`[DEBUG] requested headers: \n${JSON.stringify(requestHeaders)}`);
-                }
-                if (ctx.method == "POST") {
-                    request.continue({
-                        headers: requestHeaders,
-                        'method': 'POST',
-                        'postData': ctx.request.rawBody
-                    });
-                } else {
-                    request.continue({ headers: requestHeaders });
-                }
-            });
+async function handleRequest(request) {
+  // Modify the referer header to match the allowed localhost IP
+  let modifiedHeaders = new Headers(request.headers);
+  let requestURL = new URL(request.url);
 
-            const client = await page.target().createCDPSession();
-            await client.send('Network.setRequestInterception', {
-                patterns: [{
-                    urlPattern: '*',
-                    resourceType: 'Document',
-                    interceptionStage: 'HeadersReceived'
-                }],
-            });
+  console.log("Incoming request URL:", requestURL);
+  modifiedHeaders.set("Host", "doujindesu.tv");
+  modifiedHeaders.set("Referer", "https://doujindesu.tv/"); // Set a realistic Referer
+  modifiedHeaders.set("Access-Control-Allow-Origin", "*");
+  modifiedHeaders.set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE");
+  modifiedHeaders.set("Access-Control-Allow-Headers", "Content-Type");
+  modifiedHeaders.set("Access-Control-Allow-Credentials", "true"); // Allow credentials for POST requests
+  modifiedHeaders.set(
+    "User-Agent", 
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" // Use a popular browser's User-Agent
+  );
 
-            await client.on('Network.requestIntercepted', async e => {
-                let obj = { interceptionId: e.interceptionId };
-                if (e.isDownload) {
-                    await client.send('Network.getResponseBodyForInterception', {
-                        interceptionId: e.interceptionId
-                    }).then((result) => {
-                        if (result.base64Encoded) {
-                            responseData = Buffer.from(result.body, 'base64');
-                        }
-                    });
-                    obj['errorReason'] = 'BlockedByClient';
-                    responseHeaders = e.responseHeaders;
-                }
-                await client.send('Network.continueInterceptedRequest', obj);
-                if (e.isDownload)
-                    await page.close();
-            });
-            try {
-                let response;
-                let tryCount = 0;
-                response = await page.goto(url, { timeout: 30000, waitUntil: 'domcontentloaded' });
-                ctx.status = response.status();
-                responseBody = await response.text();
-                responseData = await response.buffer();
-                while (responseBody.includes(process.env.CHALLENGE_MATCH || "challenge-platform") && tryCount <= 10) {
-                    newResponse = await page.waitForNavigation({ timeout: 30000, waitUntil: 'domcontentloaded' });
-                    if (newResponse) response = newResponse;
-                    responseBody = await response.text();
-                    responseData = await response.buffer();
-                    tryCount++;
-                }
-                responseHeaders = await response.headers();
-                const cookies = await page.cookies();
-                if (cookies)
-                    cookies.forEach(cookie => {
-                        const { name, value, secure, expires, domain, ...options } = cookie;
-                        ctx.cookies.set(cookie.name, cookie.value, options);
-                    });
-            } catch (error) {
-                if (!error.toString().includes("ERR_BLOCKED_BY_CLIENT")) {
-                    ctx.status = 500;
-                    ctx.body = error;
-                }
-            }
+  const baseUrl = requestURL.origin;
+  var proxyUrl =
+  "https://doujindesu.tv" + requestURL.pathname + requestURL.search;
+  if( proxyUrl.includes(".webp")){
+     proxyUrl =
+  "https://desu.photos" + requestURL.pathname + requestURL.search;
+  }
+  console.log("Proxy URL:", proxyUrl);
 
-            await page.close();
-            if (responseHeaders) {
-                responseHeadersToRemove.forEach(header => delete responseHeaders[header]);
-                Object.keys(responseHeaders).forEach(header => ctx.set(header, jsesc(responseHeaders[header])));
-            }
-            if (process.env.DEBUG) {
-                console.log(`[DEBUG] response headers: \n${JSON.stringify(responseHeaders)}`);
-            }
-            if (process.env.DEBUG_BODY) {
-                console.log(`[DEBUG] body: \n${responseData}`);
-            }
-            ctx.body = responseData;
+  const defaultResponse = createDefaultResponse(baseUrl);
+
+  if (proxyUrl && proxyUrl !== baseUrl + "/") {
+    try {
+      const url = new URL(proxyUrl);
+
+      console.log("Fetching URL:", url.href);
+
+      // Proxy the request to the specified URL
+      let modifiedRequest = new Request(url.href, {
+        method: request.method,
+        headers: modifiedHeaders,
+        body: request.body,
+        redirect: "manual", // Prevent following redirects
+      });    
+
+      // Set content type and add empty body for POST requests to /themes/ajax/ch.php
+      if (request.method === "POST" && requestURL.pathname === "/themes/ajax/ch.php") {
+        modifiedHeaders.set("Content-Type", "application/x-www-form-urlencoded");
+        if (!modifiedRequest.body) {
+          modifiedRequest = new Request(modifiedRequest, { body: "" }); 
         }
-        else {
-            ctx.body = "Please specify the URL in the 'url' query string.";
-        }
+      }
+
+    let response = await fetch(modifiedRequest);
+
+    console.log("Response status:", response.status);
+
+    // Support for redirected response
+    if ([301, 302].includes(response.status)) {
+      const redirectedUrl = response.headers.get("location");
+      if (redirectedUrl) {
+        console.log("Redirecting to:", redirectedUrl);
+        const newModifiedRequest = new Request(
+          new URL(redirectedUrl, baseUrl).href, {
+          method: request.method,
+          headers: modifiedHeaders,
+          body: request.body,
+          redirect: "manual", // Prevent following redirects
+        });
+        return handleRequest(newModifiedRequest);
+      }
+    }
+
+    const newResponseHeaders = new Headers(response.headers);
+
+    // Add necessary CORS headers
+    newResponseHeaders.set("Access-Control-Allow-Origin", "*");
+    newResponseHeaders.set(
+      "Access-Control-Allow-Methods",
+      "GET, POST, PUT, DELETE"
+    );
+    newResponseHeaders.set("Access-Control-Allow-Headers", "Content-Type");
+    newResponseHeaders.set("Access-Control-Allow-Credentials", "true"); // Allow credentials for POST requests
+
+    // Modify the response body if it's HTML
+    if (response.headers.get("content-type")?.includes("text/html")) {
+      const responseBody = await response.text();
+      const $ = load(responseBody);
+      $("script:contains('mydomain'), script[src^=//], script:contains('disqus')").remove();    
+      $("img").each(function () {
+        var src = $(this).attr("src").replace("https://doujindesu.tv", "");
+        $(this).attr("src", src)
+      });
+      $("body").append(`
+        <script>
+         $(document).ready( function(){
+
+        $("#anu > img").each( function(){
+        var src = $(this).attr("src").replace("https://desu.photos", "")
+        $(this).attr("src", src)
+      })
+
+         })
+        </script>
+      `)
+      
+      const modifiedBody = $.html();
+      
+      console.log("Returning modified HTML response");
+
+      const htmlResponse = new Response(modifiedBody, {
+        status: response.status,
+        statusText: response.statusText,
+        headers: newResponseHeaders,
+      });
+      return htmlResponse;
+    }
+
+    let newResponse = new Response(response.body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: newResponseHeaders,
     });
-    app.listen(process.env.PORT || 3000, process.env.ADDRESS || "::");
-})();
+
+    if (request.method === "OPTIONS") {
+      console.log("Returning OPTIONS response");
+      const optionsResponse = new Response(null, {
+        headers: newResponseHeaders,
+      });
+      return optionsResponse;
+    }
+
+    console.log("Returning proxied response");
+    return newResponse;
+  } catch (error) {
+    console.error("Error fetching or processing request:", error);
+    return defaultResponse;
+  }
+  } else {
+    return defaultResponse;
+  }
+}
+
+function createDefaultResponse(baseUrl) {
+  let htmlResponse = `<!DOCTYPE html>...`; // Your HTML response content
+  return new Response(htmlResponse, {
+    status: 200,
+    statusText: "OK",
+    headers: {
+      "Content-Type": "text/html; charset=utf-8",
+    },
+  });
+    }
