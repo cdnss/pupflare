@@ -10,4 +10,4 @@ COPY . .
 
 EXPOSE 8787
 
-CMD ["npx", "wrangler", "dev", "index.js"]
+CMD ["npm", "start"]
