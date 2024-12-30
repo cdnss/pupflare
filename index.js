@@ -1,100 +1,170 @@
+import { serve } from "https://deno.land/std/http/server.ts";
+import { cheerio } from "https://deno.land/x/cheerio@1.0.7/mod.ts";
 
-import { load } from "cheerio";
 
-// eslint-disable-next-line no-restricted-globals
-addEventListener("fetch", (event) => {
-  event.respondWith(handleRequest(event.request));
-});
+const config = {
+  target: "https://doujindesu.tv",
+  ignoreList: [
+    "content-length",
+    /^cf\-/,
+    /^x\-forwarded\-/,
+    "x-real-ip",
+  ],
+  timeout: 5000, // Timeout in milliseconds
+};
 
-async function handleRequest(request) {
-  // Modify the referer header to match the allowed localhost IP
-  let modifiedHeaders = new Headers(request.headers);
-  let requestURL = new URL(request.url);
+const challengeMatch = Deno.env.get("CHALLENGE_MATCH");
+if (challengeMatch) {
+  console.log(`Using CHALLENGE_MATCH: ${challengeMatch}`);
+};
 
-  console.log("Incoming request URL:", requestURL);
-  modifiedHeaders.set("Host", "doujindesu.tv");
-  modifiedHeaders.set("Referer", "https://doujindesu.tv/"); // Set a realistic Referer
-  modifiedHeaders.set("Access-Control-Allow-Origin", "*");
-  modifiedHeaders.set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE");
-  modifiedHeaders.set("Access-Control-Allow-Headers", "Content-Type");
-  modifiedHeaders.set("Access-Control-Allow-Credentials", "true"); // Allow credentials for POST requests
-  modifiedHeaders.set(
-    "User-Agent", 
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" // Use a popular browser's User-Agent
-  );
 
-  const baseUrl = requestURL.origin;
-  var proxyUrl =
-  "https://doujindesu.tv" + requestURL.pathname + requestURL.search;
-  if( proxyUrl.includes(".webp")){
-     proxyUrl =
-  "https://desu.photos" + requestURL.pathname + requestURL.search;
-  }
-  console.log("Proxy URL:", proxyUrl);
+function options(): Promise<Response> {
+  const headers = {
+    "Access-Control-Allow-Origin": config.target,
+    "Access-Control-Allow-Methods": "*",
+    "Access-Control-Allow-Headers": "*",
+    "Access-Control-Expose-Headers":
+      "Date, Etag, Content-Length, Accept-Ranges, Content-Range, Server, Location",
+    "Access-Control-Max-Age": "2073600",
+  };
+  const response = new Response(null, {
+    headers,
+    status: 204,
+  });
+  return Promise.resolve(response);
+}
 
-  const defaultResponse = createDefaultResponse(baseUrl);
+function error(code: number): Promise<Response> {
+  const response = new Response(null, {
+    status: code,
+  });
+  return Promise.resolve(response);
+}
 
-  if (proxyUrl && proxyUrl !== baseUrl + "/") {
-    try {
-      const url = new URL(proxyUrl);
+async function proxy(request: Request) :Promise<Response>{
+  const { href, origin } = new URL(request.url);
+  const url = new URL(href.replace(origin, ""), config.target).toString();
 
-      console.log("Fetching URL:", url.href);
 
-      // Proxy the request to the specified URL
-      let modifiedRequest = new Request(url.href, {
-        method: request.method,
-        headers: modifiedHeaders,
-        body: request.body,
-        redirect: "manual", // Prevent following redirects
-      });    
 
-      // Set content type and add empty body for POST requests to /themes/ajax/ch.php
-      if (request.method === "POST" && requestURL.pathname === "/themes/ajax/ch.php") {
-        modifiedHeaders.set("Content-Type", "application/x-www-form-urlencoded");
-        if (!modifiedRequest.body) {
-          modifiedRequest = new Request(modifiedRequest, { body: "" }); 
+  async function getProxyRequest(req: Request): Promise<Request> {
+    const { host } = new URL(url)
+   const init = {
+      body: req.body,
+      cache: req.cache,
+      headers: getRequestHeaders(req),
+      keepalive: req.keepalive,
+      method: req.method,
+      redirect: "follow" as RequestRedirect,
+    };
+    if (req.method == "POST") {
+      init.method = "POST";
+    }
+    return new Request(url, init);
+
+    function getRequestHeaders(_req: Request) {
+      const headers: Record<string, string> = {};
+      [..._req.headers.entries()].forEach((kv) => {
+        if (kv[0].toLowerCase() === "host") {
+          return (headers["host"] = host);
+        } else if (isIgnore(kv[0])) {
+          return;
+        } else {
+          return (headers[kv[0]] = kv[1]);
         }
-      }
+      });
+      headers["referer"] = config.target;
+      headers["user-agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
+      return headers;
 
-    let response = await fetch(modifiedRequest);
-
-    console.log("Response status:", response.status);
-
-    // Support for redirected response
-    if ([301, 302].includes(response.status)) {
-      const redirectedUrl = response.headers.get("location");
-      if (redirectedUrl) {
-        console.log("Redirecting to:", redirectedUrl);
-        const newModifiedRequest = new Request(
-          new URL(redirectedUrl, baseUrl).href, {
-          method: request.method,
-          headers: modifiedHeaders,
-          body: request.body,
-          redirect: "manual", // Prevent following redirects
-        });
-        return handleRequest(newModifiedRequest);
+      function isIgnore(name: string) {
+        for (const i of config.ignoreList) {
+          if (typeof i === "string") {
+            if (i === name.toLocaleLowerCase()) {
+              return true;
+            }
+          }
+          if (i instanceof RegExp) {
+            if (i.test(name)) {
+              return true;
+            }
+          }
+        }
+        return false;
       }
     }
+  }
 
-    const newResponseHeaders = new Headers(response.headers);
+  async function getProxyResponse(req: Request): Promise<Response> {
+    let resp: Response;
+    try {
+      resp = await fetch(req, { signal: AbortSignal.timeout(config.timeout) });
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        throw new Error('Request timeout');
+      }
+      throw err;
+    }
 
-    // Add necessary CORS headers
-    newResponseHeaders.set("Access-Control-Allow-Origin", "*");
-    newResponseHeaders.set(
-      "Access-Control-Allow-Methods",
-      "GET, POST, PUT, DELETE"
-    );
-    newResponseHeaders.set("Access-Control-Allow-Headers", "Content-Type");
-    newResponseHeaders.set("Access-Control-Allow-Credentials", "true"); // Allow credentials for POST requests
+    const headers = getResponseHeaders(resp);
+    const status = resp.status;
+    const body = resp.body;
+    return new Response(body, {
+      headers,
+      status,
+    });
+    return response;
 
-    // Modify the response body if it's HTML
-    if (response.headers.get("content-type")?.includes("text/html")) {
-      const responseBody = await response.text();
-      const $ = load(responseBody);
-      $("script:contains('mydomain'), script[src^=//], script:contains('disqus')").remove();    
+   function getResponseHeaders(_resp: Response): HeadersInit {
+      const _headers = _resp.headers;
+      const corsHeaders = {
+        "Access-Control-Allow-Origin": config.target,
+        "Access-Control-Allow-Methods": "*",
+        "Access-Control-Allow-Headers": "*",
+        "Access-Control-Expose-Headers": [..._headers.keys()].join(", "),
+        "Access-Control-Max-Age": "2073600",
+      };
+
+      const headers: Record<string, string> = {};
+      [..._headers.entries()].forEach(
+        (kv) => (headers[kv[0].toLocaleLowerCase()] = kv[1])
+      );
+      Object.entries(corsHeaders).forEach(
+        (kv) => (headers[kv[0].toLocaleLowerCase()] = kv[1])
+      );
+      return headers;
+    }
+
+  }
+
+  if (challengeMatch && proxyRequest.url.includes("cdn-cgi/challenge-platform/h/g/orchestrate/jsch/v1")) {
+    try {
+      const challengeResponse = await fetch(proxyRequest);
+      const challengeText = await challengeResponse.text();
+      const match = challengeText.match(new RegExp(challengeMatch));
+      if (match) {
+        return new Response(match[1], { headers: { "content-type": "text/plain" } });
+      }
+    } catch (err) {}
+  }
+
+  const proxyRequest = await getProxyRequest(request);
+  const proxyResponse = await getProxyResponse(proxyRequest);
+  const body = await proxyResponse.text();
+  var $ = "";
+  if (body.includes("html>")) {
+    $ = cheerio.load(body);
+  } else {
+    $ = cheerio.load(body, null, false);
+  }
+  
+   $("script:contains('mydomain'), script[src^=//], script:contains('disqus')").remove();    
       $("img").each(function () {
         var src = $(this).attr("src").replace("https://doujindesu.tv", "");
-        $(this).attr("src", src)
+              $("a").each(function () {
+        var src = $(this).attr("href").replace("https://doujindesu.tv", "");
+        $(this).attr("href", src)
       });
       $("body").append(`
         <script>
@@ -108,51 +178,49 @@ async function handleRequest(request) {
          })
         </script>
       `)
-      
-      const modifiedBody = $.html();
-      
-      console.log("Returning modified HTML response");
+  
+  return new Response($.html(), {
+    headers: proxyResponse.headers,
+    status: proxyResponse.status,
+  });
 
-      const htmlResponse = new Response(modifiedBody, {
-        status: response.status,
-        statusText: response.statusText,
-        headers: newResponseHeaders,
-      });
-      return htmlResponse;
-    }
-
-    let newResponse = new Response(response.body, {
-      status: response.status,
-      statusText: response.statusText,
-      headers: newResponseHeaders,
-    });
-
-    if (request.method === "OPTIONS") {
-      console.log("Returning OPTIONS response");
-      const optionsResponse = new Response(null, {
-        headers: newResponseHeaders,
-      });
-      return optionsResponse;
-    }
-
-    console.log("Returning proxied response");
-    return newResponse;
-  } catch (error) {
-    console.error("Error fetching or processing request:", error);
-    return defaultResponse;
-  }
-  } else {
-    return defaultResponse;
-  }
 }
 
-function createDefaultResponse(baseUrl) {
-  let htmlResponse = `<!DOCTYPE html>...`; // Your HTML response content
-  return new Response(htmlResponse, {
-    status: 200,
-    statusText: "OK",
-    headers: {
-      "Content-Type": "text/html; charset=utf-8",
+function logError(request: Request, error: Error, url: string = "", proxyRequest?: Request, proxyResponse?: Response) {
+  const logObj = {
+    time: new Date().toISOString(),
+    type: "error",
+    url,
+    request: {
+      url: request.url,
+      method: request.method,
+      headers: [...request.headers.entries()],
     },
-  });
+    proxyRequest,
+    proxyResponse,
+    error: {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+    },
+  };
+  console.log(JSON.stringify(logObj));
+}
+
+async function handler(request: Request): Promise<Response> {
+  let response;
+  if (request.method === "OPTIONS") {
+    response = await options();
+  } else {
+    try {
+      response = await proxy(request);
+    } catch (err) {
+      logError(request, err, request.url);
+      response = await error(500);
     }
+  }
+
+  return response;
+}
+
+serve(handler);
