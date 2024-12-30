@@ -1,26 +1,21 @@
-# Use the official Deno image as the base image.
-FROM denoland/deno:alpine-1.38.5 AS build
+# Use the official Ubuntu image as the base image.
+FROM ubuntu:latest
 
-# Set the working directory inside the container.
 WORKDIR /app
 
-# Copy only the necessary files.
+# Update package lists and install necessary packages.
+RUN apt-get update && apt-get install -y \
+    unzip \
+    curl
+
+# Install Deno
+RUN curl -fsSL https://deno.land/x/install/install.sh | sh
+ENV DENO_INSTALL="/root/.deno"
+ENV PATH="$DENO_INSTALL/bin:$PATH"
+
 COPY . .
 
-# Compile the project
-RUN deno compile --output ./index index.ts
-
-# Start a fresh stage for the final image
-FROM denoland/deno:alpine-1.38.5 AS runtime
-
-# Set the working directory inside the container.
-WORKDIR /app
-
-# Copy only the necessary file.
-COPY --from=build /app/index /app/index
-
-# Expose the port that the application listens on.
 EXPOSE 8000
 
-# Define the command to run the application.
-CMD ["./index"]
+
+CMD ["deno", "run", "--allow-net", "index.ts"]
