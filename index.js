@@ -160,24 +160,7 @@ async function proxy(request: Request) :Promise<Response>{
   }
   
    $("script:contains('mydomain'), script[src^=//], script:contains('disqus')").remove();    
-      $("img").each(function () {
-        var src = $(this).attr("src").replace("https://doujindesu.tv", "");
-              $("a").each(function () {
-        var src = $(this).attr("href").replace("https://doujindesu.tv", "");
-        $(this).attr("href", src)
-      });
-      $("body").append(`
-        <script>
-         $(document).ready( function(){
-
-        $("#anu > img").each( function(){
-        var src = $(this).attr("src").replace("https://desu.photos", "")
-        $(this).attr("src", src)
-      })
-
-         })
-        </script>
-      `)
+   
   
   return new Response($.html(), {
     headers: proxyResponse.headers,
