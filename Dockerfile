@@ -4,7 +4,7 @@ WORKDIR /app
 
 COPY . .
 
-RUN deno cache index.ts
+
 
 EXPOSE 8000
 
