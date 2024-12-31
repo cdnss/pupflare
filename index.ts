@@ -121,7 +121,7 @@ async function handleRequest(request) {
     if (response.headers.get("content-type")?.includes("text/html")) {
       const responseBody = await response.text();
       const $ = cheerio.load(responseBody);
-      $("script:contains('mydomain'), script[src^=//], script:contains('disqus')").remove();    
+      $("a[href*=kantong], script:contains('mydomain'), script[src^=//], script:contains('disqus')").remove();    
       $("img").each(function (_i, el) {
         const src = $(el).attr("src")?.replace("https://doujindesu.tv", "") ?? "";
         $(el).attr("src", src);
