@@ -72,7 +72,7 @@ async function handleRequest(request) {
           const ipData = generateRandomIP();
           ip = ipData.ip;
           // Use Deno.connect with remoteAddr
-          const conn = await Deno.connect({
+          const conn = await Deno.connectTls({
             hostname: url.hostname,
             port: url.port 
               ? parseInt(url.port) 
