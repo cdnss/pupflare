@@ -6,13 +6,16 @@ import { serve } from "https://deno.land/std@0.188.0/http/server.ts";
 serve(handleRequest);
 
 async function handleRequest(request) {
-  const userAgents = [
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.1 Safari/605.1.15",
-    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/118.0",
-  ];
-  const randomUserAgent = userAgents[Math.floor(Math.random() * userAgents.length)];
+  function generateRandomIP() {
+    let ip = "";
+    for (let i = 0; i < 4; i++) {
+      ip += Math.floor(Math.random() * 256);
+      if (i < 3) {
+        ip += ".";
+      }
+    }
+    return ip;
+  }
 
   let modifiedHeaders = new Headers(request.headers);
   let requestURL = new URL(request.url);
@@ -24,7 +27,11 @@ async function handleRequest(request) {
   modifiedHeaders.set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE");
   modifiedHeaders.set("Access-Control-Allow-Headers", "Content-Type");
   modifiedHeaders.set("Access-Control-Allow-Credentials", "true"); // Allow credentials for POST requests
-  modifiedHeaders.set("User-Agent", randomUserAgent);
+  modifiedHeaders.set(
+    "User-Agent", 
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+  );  
+  modifiedHeaders.set("X-Forwarded-For", generateRandomIP());
 
   const baseUrl = requestURL.origin;
   var proxyUrl =
