@@ -122,7 +122,10 @@ async function handleRequest(request) {
       const responseBody = await response.text();
       const $ = cheerio.load(responseBody);
       $("a[href*=kantong], script:contains('mydomain'), script[src^=//], script:contains('disqus')").remove();    
-
+$("img").each(function (_i, el) {
+        const src = $(el).attr("src")?.replace("https://doujindesu.tv", "") ?? "";
+        $(el).attr("src", src);
+      });
       $("a").each(function (_i, el) {
         const src = $(el).attr("href")?.replace("https://doujindesu.tv", "") ?? "";
         $(el).attr("href", src);
