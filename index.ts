@@ -1,4 +1,5 @@
 
+
 import cheerio from "https://esm.sh/cheerio@1.0.0-rc.12";
 
 import { serve } from "https://deno.land/std@0.188.0/http/server.ts";
@@ -6,49 +7,53 @@ import { serve } from "https://deno.land/std@0.188.0/http/server.ts";
 serve(handleRequest);
 
 async function handleRequest(request) {
-  function generateRandomIP() {
-    let ip = "";
-    for (let i = 0; i < 4; i++) {
-      ip += Math.floor(Math.random() * 256);
-      if (i < 3) {
-        ip += ".";
-      }
-    }
-    return ip;
-  }
+  const userAgents = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/115.0",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.4 Safari/605.1.15",
+  ];
+  
+  function generateRandomIP(): { ip: string; header: string } {
+    const ip = Array.from({ length: 4 }, () =>
+      Math.floor(Math.random() * 256)
+    ).join(".");
+    const header = `X-Forwarded-For: ${ip}`; // Or any other header you prefer
+    return { ip, header };
+  }  
 
   let modifiedHeaders = new Headers(request.headers);
   let requestURL = new URL(request.url);
 
+  let { ip, header } = generateRandomIP(); // Generate initial IP
+
   console.log("Incoming request URL:", requestURL);
   modifiedHeaders.set("Host", "doujindesu.tv");
   modifiedHeaders.set("Referer", "https://doujindesu.tv/"); // Set a realistic Referer
-  modifiedHeaders.set("Access-Control-Allow-Origin", "*");
-  modifiedHeaders.set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE");
-  modifiedHeaders.set("Access-Control-Allow-Headers", "Content-Type");
-  modifiedHeaders.set("Access-Control-Allow-Credentials", "true"); // Allow credentials for POST requests
-  modifiedHeaders.set(
-    "User-Agent", 
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-  );  
-  modifiedHeaders.set("X-Forwarded-For", generateRandomIP());
+  const randomUserAgent = userAgents[Math.floor(Math.random() * userAgents.length)];
+  modifiedHeaders.set("User-Agent", randomUserAgent);
+  modifiedHeaders.set("Connection", "keep-alive");
 
   const baseUrl = requestURL.origin;
-  var proxyUrl =
-    "https://doujindesu.tv" + requestURL.pathname + requestURL.search;
-  if (proxyUrl.includes(".webp")) {
-     proxyUrl =
-    "https://desu.photos" + requestURL.pathname + requestURL.search;
-  }
+  const proxyUrl =
+    "https://doujindesu.tv" +
+    requestURL.pathname +
+    requestURL.search;
+
   console.log("Proxy URL:", proxyUrl);
 
   const defaultResponse = createDefaultResponse(baseUrl);
 
   if (proxyUrl && proxyUrl !== baseUrl + "/") {
     try {
-      const url = new URL(proxyUrl);
+      let url = new URL(proxyUrl);
 
-      console.log("Fetching URL:", url.href);
+      if (url.pathname.endsWith(".webp")) {
+        url.href = `https://desu.photos${url.pathname}${url.search}`;
+      }
+      await new Promise(resolve => setTimeout(resolve, Math.random() * 4000 + 1000)); // Delay between 1 and 5 seconds
+      console.log("Fetching URL:", url.href);    
 
       // Proxy the request to the specified URL
       let modifiedRequest = new Request(url.href, {
@@ -57,16 +62,40 @@ async function handleRequest(request) {
         body: request.body,
         redirect: "manual", // Prevent following redirects
       });    
-
-      // Set content type and add empty body for POST requests to /themes/ajax/ch.php
-      if (request.method === "POST" && requestURL.pathname === "/themes/ajax/ch.php") {
-        modifiedHeaders.set("Content-Type", "application/x-www-form-urlencoded");
-        if (!modifiedRequest.body) {
-          modifiedRequest = new Request(modifiedRequest, { body: "" }); 
+      
+      let response;
+      let retryCount = 0;
+      
+      while (retryCount < 3 && (!response || response.status >= 400)) {
+        try {
+          // Regenerate IP for each retry
+          const ipData = generateRandomIP();
+          ip = ipData.ip;
+          // Use Deno.connect with remoteAddr
+          const conn = await Deno.connect({
+            hostname: url.hostname,
+            port: url.port 
+              ? parseInt(url.port) 
+              : url.protocol === 'https:' ? 443 : 80,
+            transport: "tcp",
+            remoteAddr: { hostname: ip, port: 0 }, // Use random IP for remoteAddr
+          });
+          response = await fetch(modifiedRequest, {
+            createConnection: () => conn,
+          });
+          break;
+        } catch (error) {
+          console.error(`Error fetching (attempt ${retryCount + 1}):`, error);
+          const delay = Math.floor(Math.random() * 2000) + 1000; // Random delay between 1 and 3 seconds
+          await new Promise((resolve) => setTimeout(resolve, delay)); 
+          retryCount++;
         }
       }
 
-    let response = await fetch(modifiedRequest);
+      if (!response) {
+        console.error("Failed to fetch after multiple retries");
+        return defaultResponse;
+      }
 
     console.log("Response status:", response.status);
 
@@ -87,15 +116,6 @@ async function handleRequest(request) {
     }
 
     const newResponseHeaders = new Headers(response.headers);
-
-    // Add necessary CORS headers
-    newResponseHeaders.set("Access-Control-Allow-Origin", "*");
-    newResponseHeaders.set(
-      "Access-Control-Allow-Methods",
-      "GET, POST, PUT, DELETE"
-    );
-    newResponseHeaders.set("Access-Control-Allow-Headers", "Content-Type");
-    newResponseHeaders.set("Access-Control-Allow-Credentials", "true"); // Allow credentials for POST requests
 
     // Modify the response body if it's HTML
     if (response.headers.get("content-type")?.includes("text/html")) {
@@ -139,14 +159,6 @@ async function handleRequest(request) {
       statusText: response.statusText,
       headers: newResponseHeaders,
     });
-
-    if (request.method === "OPTIONS") {
-      console.log("Returning OPTIONS response");
-      const optionsResponse = new Response(null, {
-        headers: newResponseHeaders,
-      });
-      return optionsResponse;
-    }
 
     console.log("Returning proxied response");
     return newResponse;
