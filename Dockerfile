@@ -1,5 +1,9 @@
 FROM denoland/deno:latest
 
+WORKDIR /app
+
+COPY app.ts .
+
 EXPOSE 8000
-COPY . .
-CMD ["deno", "run", "--allow-all", "index.ts"]
+
+CMD ["deno", "run", "--allow-net", "--allow-read", "--allow-env", "app.ts"]
