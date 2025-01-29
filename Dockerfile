@@ -2,7 +2,7 @@ FROM denoland/deno:latest
 
 WORKDIR /app
 
-COPY app.ts .
+COPY index.ts .
 
 EXPOSE 8000
 
