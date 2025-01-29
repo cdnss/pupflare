@@ -5,4 +5,4 @@ COPY index.ts .
 
 EXPOSE 8000
 
-CMD ["deno", "run", "--allow-net", "--allow-read", "--allow-env", "app.ts"]
+CMD ["deno", "run", "--allow-net", "--allow-read", "--allow-env", "index.ts"]
