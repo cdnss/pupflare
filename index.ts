@@ -1,7 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { 
-  HTMLRewriter 
-} from 'https://ghuc.cc/worker-tools/html-rewriter/index.ts'
+import * as cheerio from "https://esm.sh/cheerio@1.0.0-rc.12";
 
 const target = "https://ww1.anoboy.app";
 
@@ -26,47 +24,57 @@ async function handler(req: Request): Promise<Response> {
     });
 
     const contentType = targetResponse.headers.get("Content-Type") || "";
-    if (contentType.includes("text/html") && targetResponse.body) {
-      // Gunakan HTMLRewriter untuk memproses stream HTML
-      const transformedStream = new HTMLRewriter()
-        // Hapus elemen <style> yang kosong
-        .on("style", {
-          element(el) {
-            if (el.textContent.trim() === "") {
-              el.remove();
-            }
-          },
-        })
-        // Ubah atribut href pada semua <a> sehingga menghapus base URL target
-        .on("a", {
-          element(el) {
-            const href = el.getAttribute("href");
-            if (href) {
-              el.setAttribute("href", href.replace(target, ""));
-            }
-          },
-        })
-        // Hapus elemen yang tidak diinginkan (misalnya iklan)
-        .on(".ads, .advertisement, .banner, .ad-container, .iklan, .sidebar-iklan, #ad_box, #ad_bawah, #judi, .widget_text, #judi2", {
-          element(el) {
-            el.remove();
-          },
-        })
-        .transform(targetResponse.body);
+    if (contentType.includes("text/html")) {
+      const html = await targetResponse.text();
+      const $ = cheerio.load(html);
 
-      return new Response(transformedStream, {
-        status: targetResponse.status,
-        statusText: targetResponse.statusText,
-        headers: new Headers({
-          ...corsHeaders,
-          "Content-Type": "text/html",
-        }),
+      const selectorToRemove = [
+        ".ads",
+        ".advertisement",
+        ".banner",
+        ".ad-container",
+        ".iklan",
+        ".sidebar-iklan",
+        "#ad_box",
+        "#ad_bawah",
+        "#judi",
+        ".widget_text",
+        "#judi2",
+      ];
+
+      // Hapus tag <style> yang kosong
+      $("style").each((_, el) => {
+        if ($(el).html().trim() === "") {
+          $(el).remove();
+        }
       });
-    } else {
-      // Jika bukan HTML, teruskan responsnya tanpa perubahan
+
+      // Hapus elemen yang tidak diinginkan
+      selectorToRemove.forEach((selector) => {
+        $(selector).remove();
+      });
+
+      // Modifikasi tautan pada tag <a> agar menghilangkan base URL target
+      $("a").each((_, el) => {
+        const href = $(el).attr("href");
+        if (href) {
+          $(el).attr("href", href.replace(target, ""));
+        }
+      });
+
+      const modifiedHtml = $.html();
       const headers = new Headers({
         ...corsHeaders,
+        "Content-Type": "text/html",
       });
+
+      return new Response(modifiedHtml, {
+        status: targetResponse.status,
+        statusText: targetResponse.statusText,
+        headers,
+      });
+    } else {
+      const headers = new Headers({ ...corsHeaders });
       targetResponse.headers.forEach((value, key) => {
         headers.append(key, value);
       });
