@@ -8,6 +8,54 @@ const corsHeaders = {
   "access-control-allow-headers": "Origin, X-Requested-With, Content-Type, Accept",
 };
 
+function transformHTML(html: string): string {
+  const $ = cheerio.load(html);
+
+  // Hapus elemen-elemen iklan dan banner
+  [
+    ".ads",
+    ".advertisement",
+    ".banner",
+    ".ad-container",
+    ".iklan",
+    ".sidebar-iklan",
+    "#ad_box",
+    "#ad_bawah",
+    "#judi",
+    ".widget_text",
+    "#judi2",
+  ].forEach((sel) => $(sel).remove());
+
+  // Ubah tautan <a> agar menghilangkan base URL target
+  $("a").each((_, el) => {
+    const href = $(el).attr("href");
+    if (href) {
+      $(el).attr("href", href.replace(target, ""));
+    }
+  });
+
+  // Ubah bagian iframe: ambil src-nya, hapus atribut src, sisipkan tombol yang memiliki data-video, dan tambahkan script untuk mengatur klik
+  const iframe = $("#mediaplayer");
+  if (iframe.length > 0) {
+    const currentSrc = iframe.attr("src") || "";
+    iframe.removeAttr("src");
+    // Sisipkan tombol sebelum iframe
+    const buttonHtml = `<button id="load-video" data-video="${currentSrc}" style="margin-bottom:10px;">Load Video</button>`;
+    iframe.before(buttonHtml);
+    // Sisipkan script untuk menangani klik tombol
+    $("body").append(`
+      <script>
+        document.getElementById('load-video').addEventListener('click', function() {
+          var videoSrc = this.getAttribute('data-video');
+          document.getElementById('mediaplayer').setAttribute('src', videoSrc);
+        });
+      </script>
+    `);
+  }
+
+  return $.html();
+}
+
 async function handler(req: Request): Promise<Response> {
   const url = new URL(req.url);
   const targetUrl = new URL(target + url.pathname + url.search);
@@ -26,48 +74,11 @@ async function handler(req: Request): Promise<Response> {
     const contentType = targetResponse.headers.get("Content-Type") || "";
     if (contentType.includes("text/html")) {
       const html = await targetResponse.text();
-      const $ = cheerio.load(html);
-
-      const selectorToRemove = [
-        ".ads",
-        ".advertisement",
-        ".banner",
-        ".ad-container",
-        ".iklan",
-        ".sidebar-iklan",
-        "#ad_box",
-        "#ad_bawah",
-        "#judi",
-        ".widget_text",
-        "#judi2",
-      ];
-
-      // Hapus tag <style> yang kosong
-      $("style").each((_, el) => {
-        if ($(el).html().trim() === "") {
-          $(el).remove();
-        }
-      });
-
-      // Hapus elemen yang tidak diinginkan
-      selectorToRemove.forEach((selector) => {
-        $(selector).remove();
-      });
-
-      // Modifikasi tautan pada tag <a> agar menghilangkan base URL target
-      $("a").each((_, el) => {
-        const href = $(el).attr("href");
-        if (href) {
-          $(el).attr("href", href.replace(target, ""));
-        }
-      });
-
-      const modifiedHtml = $.html();
+      const modifiedHtml = transformHTML(html);
       const headers = new Headers({
         ...corsHeaders,
         "Content-Type": "text/html",
       });
-
       return new Response(modifiedHtml, {
         status: targetResponse.status,
         statusText: targetResponse.statusText,
