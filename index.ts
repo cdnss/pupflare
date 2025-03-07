@@ -1,4 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { 
+  HTMLRewriter 
+} from 'https://ghuc.cc/worker-tools/html-rewriter/index.ts'
 
 const target = "https://ww1.anoboy.app";
 
