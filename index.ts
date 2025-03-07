@@ -1,5 +1,4 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import * as cheerio from "https://esm.sh/cheerio@1.0.0-rc.12";
 
 const target = "https://ww1.anoboy.app";
 
@@ -13,11 +12,7 @@ async function handler(req: Request): Promise<Response> {
   const targetUrl = new URL(target + url.pathname + url.search);
 
   if (req.method === "OPTIONS") {
-    return new Response(null, {
-      headers: {
-        ...corsHeaders,
-      },
-    });
+    return new Response(null, { headers: corsHeaders });
   }
 
   try {
@@ -27,63 +22,45 @@ async function handler(req: Request): Promise<Response> {
       body: req.body,
     });
 
-    if (targetResponse.headers.get("Content-Type")?.includes("text/html")) {
-      const html = await targetResponse.text();
-      const $ = cheerio.load(html);
-
-
-        const selectorToRemove = [
-      ".ads",
-      ".advertisement",
-      ".banner",
-      ".ad-container",
-      ".iklan",
-      ".sidebar-iklan",
-      "#ad_box",
-      "#ad_bawah",
-      "#judi",
-      ".widget_text",
-      "#judi2",
-    ];
-
-        $('style').each((_, el) => {
-            if ($(el).html() === ''){
-                $(el).remove();
+    const contentType = targetResponse.headers.get("Content-Type") || "";
+    if (contentType.includes("text/html") && targetResponse.body) {
+      // Gunakan HTMLRewriter untuk memproses stream HTML
+      const transformedStream = new HTMLRewriter()
+        // Hapus elemen <style> yang kosong
+        .on("style", {
+          element(el) {
+            if (el.textContent.trim() === "") {
+              el.remove();
             }
-        });
+          },
+        })
+        // Ubah atribut href pada semua <a> sehingga menghapus base URL target
+        .on("a", {
+          element(el) {
+            const href = el.getAttribute("href");
+            if (href) {
+              el.setAttribute("href", href.replace(target, ""));
+            }
+          },
+        })
+        // Hapus elemen yang tidak diinginkan (misalnya iklan)
+        .on(".ads, .advertisement, .banner, .ad-container, .iklan, .sidebar-iklan, #ad_box, #ad_bawah, #judi, .widget_text, #judi2", {
+          element(el) {
+            el.remove();
+          },
+        })
+        .transform(targetResponse.body);
 
-
-      // Remove elements with specific classes or IDs related to ads
-      
-      selectorToRemove.forEach(selector => {
-        $(selector).remove();
-      });
-
-
-      // Modify anchor tag hrefs
-      $("a").each((_, el) => {
-        const element = $(el);
-        let href = element.attr("href");
-        if (href) {
-          href = href.replace(target, "");
-          $(el).attr("href", href);
-        }
-      });
-
-      const modifiedHtml = $.html();
-
-      const headers = new Headers({
-        ...corsHeaders,
-
-        "Content-Type": "text/html",
-      });
-
-      return new Response(modifiedHtml, {
+      return new Response(transformedStream, {
         status: targetResponse.status,
         statusText: targetResponse.statusText,
-        headers,
+        headers: new Headers({
+          ...corsHeaders,
+          "Content-Type": "text/html",
+        }),
       });
     } else {
+      // Jika bukan HTML, teruskan responsnya tanpa perubahan
       const headers = new Headers({
         ...corsHeaders,
       });
