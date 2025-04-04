@@ -63,7 +63,7 @@ async function handler(req: Request): Promise<Response> {
       const modifiedHtml = transformHTML(html);
       const headers = new Headers({
         ...corsHeaders,
-        "Content-Type": "text/html",
+        "Content-Type": "text/html; charset=utf-8",
       });
       return new Response(modifiedHtml, {
         status: targetResponse.status,
