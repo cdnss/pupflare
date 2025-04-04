@@ -22,7 +22,7 @@ function filterRequestHeaders(headers: Headers): Headers {
     "x-forwarded-for",
     "cf-connecting-ip",
     "cf-ipcountry",
-    "x-real-ip"
+    "x-real-ip",
   ];
   for (const [key, value] of headers) {
     if (!forbidden.includes(key.toLowerCase())) {
@@ -33,25 +33,24 @@ function filterRequestHeaders(headers: Headers): Headers {
 }
 
 /**
- * Fungsi transformHTML menerapkan perbaikan SEO berupa:
+ * Fungsi transformHTML menerapkan perbaikan SEO:
  *
- * • Menghapus elemen yang tidak diinginkan (iklan, banner, dsb.).  
- * • Menambahkan meta tag (charset, viewport, keywords, description) bila belum ada.  
- * • Menambahkan tag canonical, dengan canonical URL yang diambil dari request (requestUrl.href).  
- * • Menyisipkan structured data JSON‑LD (schema.org) supaya mesin pencari dapat memahami konten.  
- * • Menambahkan lazy loading ke semua tag <img> dan <iframe>.  
- * • Mengubah setiap tag link (<a> dan <link>) yang memiliki href mengandung target,
+ * - Menghapus elemen yang tidak diinginkan.
+ * - Menambahkan meta tag (charset, viewport, keywords, description) bila belum ada.
+ * - Menambahkan tag canonical dengan canonical URL yang diambil dari request (menggunakan requestUrl.href).
+ * - Menyisipkan structured data JSON‑LD (schema.org).
+ * - Menambahkan lazy loading ke semua <img> dan <iframe>.
+ * - Mengubah setiap tag link (<a> dan <link>) yang memiliki href yang mengandung URL target,
  *   sehingga host-nya diganti dengan host dari URL permintaan (requestUrl.origin).
- * • Menambahkan blok internal linking (related links) jika belum ada.
  *
  * @param html - Konten HTML asli.
- * @param canonicalUrl - URL canonical yang diambil dari request (requestUrl.href).
+ * @param canonicalUrl - Canonical URL yang diambil dari request (requestUrl.href).
  * @returns HTML yang telah dimodifikasi.
  */
 function transformHTML(html: string, canonicalUrl: string): string {
   const $ = cheerio.load(html);
 
-  // Hapus elemen yang tidak diinginkan.
+  // Hapus elemen yang tidak diperlukan.
   [
     ".ads",
     ".advertisement",
@@ -62,10 +61,18 @@ function transformHTML(html: string, canonicalUrl: string): string {
     "#ad_box",
     "#ad_bawah",
     "#judi",
-    "#judi2"
+    "#judi2",
   ].forEach(selector => $(selector).remove());
 
-  // Tambahkan meta tag jika belum ada.
+  // Ubah tautan <a> agar tidak menyertakan base URL target.
+  $("a").each((_, el) => {
+    const href = $(el).attr("href");
+    if (href) {
+      $(el).attr("href", href.replace(target, ""));
+    }
+  });
+
+  // Tambahkan meta tag bila belum ada.
   if ($("meta[charset]").length === 0) {
     $("head").prepend(`<meta charset="UTF-8">`);
   }
@@ -92,24 +99,24 @@ function transformHTML(html: string, canonicalUrl: string): string {
     "@type": "Article",
     "mainEntityOfPage": {
       "@type": "WebPage",
-      "@id": canonicalLink
+      "@id": canonicalLink,
     },
     "headline": $("title").text() || "Artikel Anime",
     "description": $("meta[name='description']").attr("content") || "",
     "author": {
       "@type": "Organization",
-      "name": $("meta[name='author']").attr("content") || "anoBoy"
+      "name": $("meta[name='author']").attr("content") || "anoBoy",
     },
     "publisher": {
       "@type": "Organization",
       "name": "anoBoy",
       "logo": {
         "@type": "ImageObject",
-        "url": "https://ww1.anoboy.app/wp-content/uploads/2019/02/cropped-512x512-192x192.png"
-      }
+        "url": "https://ww1.anoboy.app/wp-content/uploads/2019/02/cropped-512x512-192x192.png",
+      },
     },
     "datePublished": $("meta[property='article:published_time']").attr("content") || new Date().toISOString(),
-    "dateModified": $("meta[property='article:modified_time']").attr("content") || new Date().toISOString()
+    "dateModified": $("meta[property='article:modified_time']").attr("content") || new Date().toISOString(),
   };
   $("head").append(`<script type="application/ld+json">${JSON.stringify(structuredData)}</script>`);
 
@@ -125,41 +132,20 @@ function transformHTML(html: string, canonicalUrl: string): string {
     }
   });
 
-  // Ambil origin dari canonicalUrl (misalnya "http://yourhost.com").
+  // Ambil origin dari canonicalUrl.
   const currentOrigin = new URL(canonicalUrl).origin;
 
-  // Ganti setiap tag link (<a> dan <link>) yang memiliki href berisi target
-  // agar host-nya menggunakan currentOrigin.
+  // Ganti setiap tag link (<a> dan <link>) yang memiliki href yang mengandung target,
+  // sehingga host-nya diganti dengan currentOrigin.
   $("a[href], link[href]").each((_, el) => {
     const href = $(el).attr("href");
     if (href && href.startsWith(target)) {
-      // Ganti target (misalnya "https://ww1.anoboy.app") dengan currentOrigin.
       const newHref = currentOrigin + href.slice(target.length);
       $(el).attr("href", newHref);
     }
   });
 
-  // Sisipkan blok internal linking (related links) jika belum ada.
-  if ($("div.related-links").length === 0) {
-    const relatedLinksHTML = `
-      <div class="related-links">
-        <h3>Rekomendasi Terkait:</h3>
-        <ul>
-          <li><a href="/category/comedy/">Anime Komedi</a></li>
-          <li><a href="/category/harem/">Anime Harem</a></li>
-          <li><a href="/category/school/">Anime Sekolah</a></li>
-        </ul>
-      </div>
-    `;
-    if ($("#footer").length > 0) {
-      $("#footer").before(relatedLinksHTML);
-    } else {
-      $("body").append(relatedLinksHTML);
-    }
-  }
-
   let processedHtml = $.html();
-  // Pastikan DOCTYPE ada di awal dokumen.
   if (!/^<!DOCTYPE\s+/i.test(processedHtml)) {
     processedHtml = "<!DOCTYPE html>\n" + processedHtml;
   }
@@ -172,9 +158,9 @@ function transformHTML(html: string, canonicalUrl: string): string {
  * - Jika respons bertipe HTML, lakukan transformasi untuk peningkatan SEO.
  */
 async function handler(req: Request): Promise<Response> {
-  // Buat URL permintaan lengkap dengan base dari header host (fallback ke localhost).
+  // Dapatkan host dari header, lalu buat URL request menggunakan basis https.
   const host = req.headers.get("host") || `localhost:${port}`;
-  const requestUrl = new URL(req.url, `http://${host}`);
+  const requestUrl = new URL(req.url, `https://${host}`);
 
   // Tangani preflight CORS (OPTIONS).
   if (req.method === "OPTIONS") {
@@ -185,7 +171,6 @@ async function handler(req: Request): Promise<Response> {
   const targetUrl = new URL(target + requestUrl.pathname + requestUrl.search);
 
   try {
-    // Filter header request agar tidak mengirim header sensitif.
     const filteredHeaders = filterRequestHeaders(req.headers);
     const targetResponse = await fetch(targetUrl.toString(), {
       method: req.method,
@@ -195,7 +180,7 @@ async function handler(req: Request): Promise<Response> {
     const contentType = targetResponse.headers.get("content-type") || "";
     if (contentType.includes("text/html")) {
       const htmlContent = await targetResponse.text();
-      // Gunakan URL permintaan (requestUrl.href) sebagai canonical URL.
+      // Gunakan requestUrl.href sebagai canonical URL.
       const modifiedHtml = transformHTML(htmlContent, requestUrl.href);
       const responseHeaders = new Headers(corsHeaders);
       responseHeaders.set("Content-Type", "text/html; charset=utf-8");
@@ -205,7 +190,6 @@ async function handler(req: Request): Promise<Response> {
         headers: responseHeaders,
       });
     } else {
-      // Untuk respons non-HTML, teruskan body sebagai stream.
       const responseHeaders = new Headers(corsHeaders);
       for (const [key, value] of targetResponse.headers) {
         if (
@@ -228,5 +212,5 @@ async function handler(req: Request): Promise<Response> {
   }
 }
 
-console.log(`Server proxy dengan peningkatan SEO berjalan di port ${port}`);
+console.log(`Server proxy berjalan dengan peningkatan SEO di port ${port}`);
 serve(handler, { port });
