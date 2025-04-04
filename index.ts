@@ -34,8 +34,12 @@ function transformHTML(html: string): string {
     }
   });
 
-
-  return $.html();
+const processedHtml = $.html();
+  // Prepend doctype jika tidak ada
+  if (!/^<!DOCTYPE\s+/i.test(processedHtml)) {
+    return "<!DOCTYPE html>\n" + processedHtml;
+  }
+  return processedHtml
 }
 
 async function handler(req: Request): Promise<Response> {
