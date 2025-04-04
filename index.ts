@@ -33,7 +33,9 @@ function transformHTML(html: string): string {
       $(el).attr("href", href.replace(target, ""));
     }
   });
-
+if ($("meta[charset]").length === 0) {
+    $("head").prepend(`<meta charset="UTF-8">`);
+}
 const processedHtml = $.html();
   // Prepend doctype jika tidak ada
   if (!/^<!DOCTYPE\s+/i.test(processedHtml)) {
