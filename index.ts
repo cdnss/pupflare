@@ -16,13 +16,13 @@ function transformHTML(html: string): string {
     ".ads",
     ".advertisement",
     ".banner",
-    ".ad-container",
+    
     ".iklan",
     ".sidebar-iklan",
     "#ad_box",
     "#ad_bawah",
     "#judi",
-    ".widget_text",
+    
     "#judi2",
   ].forEach((sel) => $(sel).remove());
 
@@ -34,24 +34,6 @@ function transformHTML(html: string): string {
     }
   });
 
-  // Ubah bagian iframe: ambil src-nya, hapus atribut src, sisipkan tombol yang memiliki data-video, dan tambahkan script untuk mengatur klik
-  const iframe = $("#mediaplayer");
-  if (iframe.length > 0) {
-    const currentSrc = iframe.attr("src") || "";
-    iframe.removeAttr("src");
-    // Sisipkan tombol sebelum iframe
-    const buttonHtml = `<button id="load-video" data-video="${currentSrc}" style="margin-bottom:10px;">Load Video</button>`;
-    iframe.before(buttonHtml);
-    // Sisipkan script untuk menangani klik tombol
-    $("body").append(`
-      <script>
-        document.getElementById('load-video').addEventListener('click', function() {
-          var videoSrc = this.getAttribute('data-video');
-          document.getElementById('mediaplayer').setAttribute('src', videoSrc);
-        });
-      </script>
-    `);
-  }
 
   return $.html();
 }
