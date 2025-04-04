@@ -16,9 +16,9 @@ function transformHTML(html: string): string {
     ".ads",
     ".advertisement",
     ".banner",
-    
+    "#coloma",
     ".iklan",
-    ".sidebar-iklan",
+    ".sidebar a",
     "#ad_box",
     "#ad_bawah",
     "#judi",
