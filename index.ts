@@ -1,5 +1,4 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { Headers } from "https://deno.land/std@0.168.0/http/mod.ts";
 import * as cheerio from "https://esm.sh/cheerio@1.0.0-rc.12";
 
 // Ambil variabel lingkungan untuk konfigurasi server
