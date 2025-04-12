@@ -35,22 +35,27 @@ function filterRequestHeaders(headers: Headers): Headers {
 /**
  * Fungsi transformHTML menerapkan perbaikan SEO:
  *
- * - Menghapus elemen yang tidak diinginkan.
- * - Menambahkan meta tag (charset, viewport, keywords, description) bila belum ada.
- * - Menambahkan tag canonical dengan canonical URL yang diambil dari request (menggunakan requestUrl.href).
- * - Menyisipkan structured data JSON‑LD (schema.org).
- * - Menambahkan lazy loading ke semua <img> dan <iframe>.
- * - Mengubah setiap tag link (<a> dan <link>) yang memiliki href yang mengandung URL target,
- *   sehingga host-nya diganti dengan host dari URL permintaan (requestUrl.origin).
+ * • Memastikan canonicalUrl selalu menggunakan protokol HTTPS.  
+ * • Menghapus elemen-elemen yang tidak diinginkan (iklan, banner, dsb.).  
+ * • Menambahkan meta tag (charset, viewport, keywords, description) jika belum ada.  
+ * • Menambahkan tag canonical dengan canonical URL yang diambil dari request (canonicalUrl).  
+ * • Menyisipkan structured data JSON‑LD (schema.org).  
+ * • Menambahkan atribut lazy loading ke semua tag <img> dan <iframe>.  
+ * • Mengganti setiap tag link (<a> dan <link>) yang memiliki href yang diawali target, sehingga host-nya diubah menjadi host dari URL permintaan.
  *
  * @param html - Konten HTML asli.
  * @param canonicalUrl - Canonical URL yang diambil dari request (requestUrl.href).
  * @returns HTML yang telah dimodifikasi.
  */
 function transformHTML(html: string, canonicalUrl: string): string {
+  // Pastikan canonicalUrl diawali dengan 'https://'
+  if (!canonicalUrl.startsWith("https://")) {
+    canonicalUrl = "https://" + canonicalUrl.replace(/^https?:\/\//, "");
+  }
+
   const $ = cheerio.load(html);
 
-  // Hapus elemen yang tidak diperlukan.
+  // Hapus elemen yang tidak diinginkan
   [
     ".ads",
     ".advertisement",
@@ -62,9 +67,9 @@ function transformHTML(html: string, canonicalUrl: string): string {
     "#ad_bawah",
     "#judi",
     "#judi2",
-  ].forEach(selector => $(selector).remove());
+  ].forEach((selector) => $(selector).remove());
 
-  // Ubah tautan <a> agar tidak menyertakan base URL target.
+  // Ubah tautan <a> agar tidak menyertakan base URL target
   $("a").each((_, el) => {
     const href = $(el).attr("href");
     if (href) {
@@ -72,7 +77,7 @@ function transformHTML(html: string, canonicalUrl: string): string {
     }
   });
 
-  // Tambahkan meta tag bila belum ada.
+  // Tambahkan meta tag bila belum ada
   if ($("meta[charset]").length === 0) {
     $("head").prepend(`<meta charset="UTF-8">`);
   }
@@ -86,20 +91,16 @@ function transformHTML(html: string, canonicalUrl: string): string {
     $("head").append(`<meta name="description" content="Akses konten anime terbaru dengan subtitle Indonesia.">`);
   }
 
-  // Jika belum ada canonical link, gunakan canonicalUrl dari request.
-  let canonicalLink = $("link[rel='canonical']").attr("href");
-  if (!canonicalLink) {
-    canonicalLink = canonicalUrl;
-    $("head").append(`<link rel="canonical" href="${canonicalLink}">`);
-  }
+  // Tambahkan tag canonical dengan canonicalUrl (override apa pun)
+  $("head").append(`<link rel="canonical" href="${canonicalUrl}">`);
 
-  // Sisipkan structured data JSON‑LD untuk schema.org.
+  // Sisipkan structured data JSON‑LD untuk schema.org
   const structuredData = {
     "@context": "https://schema.org",
     "@type": "Article",
     "mainEntityOfPage": {
       "@type": "WebPage",
-      "@id": canonicalLink,
+      "@id": canonicalUrl,
     },
     "headline": $("title").text() || "Artikel Anime",
     "description": $("meta[name='description']").attr("content") || "",
@@ -120,7 +121,7 @@ function transformHTML(html: string, canonicalUrl: string): string {
   };
   $("head").append(`<script type="application/ld+json">${JSON.stringify(structuredData)}</script>`);
 
-  // Tambahkan lazy loading ke semua tag <img> dan <iframe>.
+  // Tambahkan lazy loading ke semua tag <img> dan <iframe>
   $("img").each((_, el) => {
     if (!$(el).attr("loading")) {
       $(el).attr("loading", "lazy");
@@ -132,11 +133,9 @@ function transformHTML(html: string, canonicalUrl: string): string {
     }
   });
 
-  // Ambil origin dari canonicalUrl.
+  // Ubah setiap tag link (<a> dan <link>) yang memiliki href yang mengandung target,
+  // sehingga host-nya diganti dengan host dari canonicalUrl.
   const currentOrigin = new URL(canonicalUrl).origin;
-
-  // Ganti setiap tag link (<a> dan <link>) yang memiliki href yang mengandung target,
-  // sehingga host-nya diganti dengan currentOrigin.
   $("a[href], link[href]").each((_, el) => {
     const href = $(el).attr("href");
     if (href && href.startsWith(target)) {
@@ -154,20 +153,23 @@ function transformHTML(html: string, canonicalUrl: string): string {
 
 /**
  * Handler untuk setiap request:
+ * - Menggunakan request URL dengan basis "https://" (meskipun header host mungkin berbeda).
  * - Meneruskan request ke target dengan header yang sudah difilter.
  * - Jika respons bertipe HTML, lakukan transformasi untuk peningkatan SEO.
  */
 async function handler(req: Request): Promise<Response> {
-  // Dapatkan host dari header, lalu buat URL request menggunakan basis https.
+  // Gunakan host dari header, namun force basis "https://"
   const host = req.headers.get("host") || `localhost:${port}`;
   const requestUrl = new URL(req.url, `https://${host}`);
+  // Gunakan URL permintaan sebagai canonical URL (akan dipastikan menggunakan https)
+  const canonicalUrl = requestUrl.href;
 
-  // Tangani preflight CORS (OPTIONS).
+  // Tangani preflight CORS (OPTIONS)
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
-  // Bentuk URL target berdasarkan path dan query dari request.
+  // Bentuk URL target berdasarkan path & query dari request
   const targetUrl = new URL(target + requestUrl.pathname + requestUrl.search);
 
   try {
@@ -180,8 +182,7 @@ async function handler(req: Request): Promise<Response> {
     const contentType = targetResponse.headers.get("content-type") || "";
     if (contentType.includes("text/html")) {
       const htmlContent = await targetResponse.text();
-      // Gunakan requestUrl.href sebagai canonical URL.
-      const modifiedHtml = transformHTML(htmlContent, requestUrl.href);
+      const modifiedHtml = transformHTML(htmlContent, canonicalUrl);
       const responseHeaders = new Headers(corsHeaders);
       responseHeaders.set("Content-Type", "text/html; charset=utf-8");
       return new Response(modifiedHtml, {
@@ -192,12 +193,7 @@ async function handler(req: Request): Promise<Response> {
     } else {
       const responseHeaders = new Headers(corsHeaders);
       for (const [key, value] of targetResponse.headers) {
-        if (
-          key.toLowerCase() === "content-encoding" ||
-          key.toLowerCase() === "content-length"
-        ) {
-          continue;
-        }
+        if (key.toLowerCase() === "content-encoding" || key.toLowerCase() === "content-length") continue;
         responseHeaders.set(key, value);
       }
       return new Response(targetResponse.body, {
@@ -212,5 +208,5 @@ async function handler(req: Request): Promise<Response> {
   }
 }
 
-console.log(`Server proxy berjalan dengan peningkatan SEO di port ${port}`);
+console.log(`Server proxy dengan peningkatan SEO berjalan di port ${port}`);
 serve(handler, { port });
