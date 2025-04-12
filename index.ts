@@ -139,7 +139,7 @@ function transformHTML(html: string, canonicalUrl: string): string {
   $("a[href], link[href]").each((_, el) => {
     const href = $(el).attr("href");
     if (href && href.startsWith(target)) {
-      const newHref = currentOrigin + href.slice(target.length);
+      const newHref = href.slice(target.length);
       $(el).attr("href", newHref);
     }
   });
