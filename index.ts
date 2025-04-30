@@ -1,5 +1,5 @@
 // script_render_and_serve.ts
-import { launch } from 'https://deno.land/x/puppeteer@16.2.0/mod.ts'; // Sesuaikan versi jika perlu
+import { launch } from 'https://deno.land/x/puppeteer@19.2.1/src/puppeteer.ts'; // Menggunakan versi dan path yang berbeda
 import { serve } from 'https://deno.land/std@0.224.0/http/mod.ts'; // Menggunakan modul serve dari std
 
 // URL target Anda
