@@ -14,7 +14,7 @@ COPY index.ts .
 # -A memberikan semua izin (diperlukan untuk download dan instalasi).
 # --unstable diperlukan untuk beberapa API Deno yang digunakan oleh script instalasi.
 # Menggunakan versi Puppeteer yang sama dengan yang digunakan di script Anda.
-RUN PUPPETEER_PRODUCT=chrome deno run -A --unstable-* https://deno.land/x/puppeteer@16.2.0/install.ts
+#RUN PUPPETEER_PRODUCT=chrome deno run -A --unstable-* https://deno.land/x/puppeteer@16.2.0/install.ts
 # -----------------------------------------------
 
 # Mengekspos port yang digunakan oleh aplikasi (jika aplikasi mendengarkan di port 8080)
