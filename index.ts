@@ -1,212 +1,86 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import * as cheerio from "https://esm.sh/cheerio@1.0.0-rc.12";
+// script_render_and_serve.ts
+import { launch } from 'https://deno.land/x/puppeteer@16.2.0/mod.ts'; // Sesuaikan versi jika perlu
+import { serve } from 'https://deno.land/std@0.224.0/http/mod.ts'; // Menggunakan modul serve dari std
 
-// Konfigurasi melalui environment variable atau gunakan default
-const target = Deno.env.get("TARGET_URL") || "https://ww1.anoboy.app";
-const port = parseInt(Deno.env.get("PORT") || "8000");
+// URL target Anda
+const targetUrl = 'https://cloud.hownetwork.xyz/video.php?id=Lh09YywNWiYqPgQ4bgJmanBVPisnHRseGg5OfSIAb2p1TQ';
 
-// Header CORS standar
-const corsHeaders = new Headers({
-  "access-control-allow-origin": "*",
-  "access-control-allow-headers": "Origin, X-Requested-With, Content-Type, Accept",
-});
+// Port untuk server HTTP lokal
+const serverPort = 8080;
 
-/**
- * Fungsi untuk menyaring header request agar tidak mengirimkan header sensitif.
- */
-function filterRequestHeaders(headers: Headers): Headers {
-  const newHeaders = new Headers();
-  const forbidden = [
-    "host",
-    "connection",
-    "x-forwarded-for",
-    "cf-connecting-ip",
-    "cf-ipcountry",
-    "x-real-ip",
-  ];
-  for (const [key, value] of headers) {
-    if (!forbidden.includes(key.toLowerCase())) {
-      newHeaders.append(key, value);
-    }
-  }
-  return newHeaders;
-}
+let renderedHtmlContent: string | null = null;
 
-/**
- * Fungsi transformHTML menerapkan perbaikan SEO:
- *
- * • Memastikan canonicalUrl selalu menggunakan protokol HTTPS.  
- * • Menghapus elemen-elemen yang tidak diinginkan (iklan, banner, dsb.).  
- * • Menambahkan meta tag (charset, viewport, keywords, description) jika belum ada.  
- * • Menambahkan tag canonical dengan canonical URL yang diambil dari request (canonicalUrl).  
- * • Menyisipkan structured data JSON‑LD (schema.org).  
- * • Menambahkan atribut lazy loading ke semua tag <img> dan <iframe>.  
- * • Mengganti setiap tag link (<a> dan <link>) yang memiliki href yang diawali target, sehingga host-nya diubah menjadi host dari URL permintaan.
- *
- * @param html - Konten HTML asli.
- * @param canonicalUrl - Canonical URL yang diambil dari request (requestUrl.href).
- * @returns HTML yang telah dimodifikasi.
- */
-function transformHTML(html: string, canonicalUrl: string): string {
-  // Pastikan canonicalUrl diawali dengan 'https://'
-  if (!canonicalUrl.startsWith("https://")) {
-    canonicalUrl = "https://" + canonicalUrl.replace(/^https?:\/\//, "");
-  }
+async function fetchAndRenderPage() {
+  console.log(`[Puppeteer] Membuka browser dan menavigasi ke ${targetUrl}...`);
 
-  const $ = cheerio.load(html);
-
-  // Hapus elemen yang tidak diinginkan
-  [
-    ".ads",
-    ".advertisement",
-    ".banner",
-    "#coloma",
-    ".iklan",
-    ".sidebar a",
-    "#ad_box",
-    "#ad_bawah",
-    "#judi",
-    "#judi2",
-  ].forEach((selector) => $(selector).remove());
-
-  // Ubah tautan <a> agar tidak menyertakan base URL target
-  $("a").each((_, el) => {
-    const href = $(el).attr("href");
-    if (href) {
-      $(el).attr("href", href.replace(target, ""));
-    }
-  });
-
-  // Tambahkan meta tag bila belum ada
-  if ($("meta[charset]").length === 0) {
-    $("head").prepend(`<meta charset="UTF-8">`);
-  }
-  if ($("meta[name='viewport']").length === 0) {
-    $("head").append(`<meta name="viewport" content="width=device-width, initial-scale=1">`);
-  }
-  if ($("meta[name='keywords']").length === 0) {
-    $("head").append(`<meta name="keywords" content="anime, streaming, subtitle indonesia, download anime">`);
-  }
-  if ($("meta[name='description']").length === 0) {
-    $("head").append(`<meta name="description" content="Akses konten anime terbaru dengan subtitle Indonesia.">`);
-  }
-
-  // Tambahkan tag canonical dengan canonicalUrl (override apa pun)
-  $("head").append(`<link rel="canonical" href="${canonicalUrl}">`);
-
-  // Sisipkan structured data JSON‑LD untuk schema.org
-  const structuredData = {
-    "@context": "https://schema.org",
-    "@type": "Article",
-    "mainEntityOfPage": {
-      "@type": "WebPage",
-      "@id": canonicalUrl,
-    },
-    "headline": $("title").text() || "Artikel Anime",
-    "description": $("meta[name='description']").attr("content") || "",
-    "author": {
-      "@type": "Organization",
-      "name": $("meta[name='author']").attr("content") || "anoBoy",
-    },
-    "publisher": {
-      "@type": "Organization",
-      "name": "anoBoy",
-      "logo": {
-        "@type": "ImageObject",
-        "url": "https://ww1.anoboy.app/wp-content/uploads/2019/02/cropped-512x512-192x192.png",
-      },
-    },
-    "datePublished": $("meta[property='article:published_time']").attr("content") || new Date().toISOString(),
-    "dateModified": $("meta[property='article:modified_time']").attr("content") || new Date().toISOString(),
-  };
-  $("head").append(`<script type="application/ld+json">${JSON.stringify(structuredData)}</script>`);
-
-  // Tambahkan lazy loading ke semua tag <img> dan <iframe>
-  $("img").each((_, el) => {
-    if (!$(el).attr("loading")) {
-      $(el).attr("loading", "lazy");
-    }
-  });
-  $("iframe").each((_, el) => {
-    if (!$(el).attr("loading")) {
-      $(el).attr("loading", "lazy");
-    }
-  });
-
-  // Ubah setiap tag link (<a> dan <link>) yang memiliki href yang mengandung target,
-  // sehingga host-nya diganti dengan host dari canonicalUrl.
-  const currentOrigin = new URL(canonicalUrl).origin;
-  $("a[href], link[href]").each((_, el) => {
-    const href = $(el).attr("href");
-    if (href && href.startsWith(target)) {
-      const newHref = href.slice(target.length);
-      $(el).attr("href", newHref);
-    }
-  });
-
-  let processedHtml = $.html();
-  if (!/^<!DOCTYPE\s+/i.test(processedHtml)) {
-    processedHtml = "<!DOCTYPE html>\n" + processedHtml;
-  }
-  return processedHtml;
-}
-
-/**
- * Handler untuk setiap request:
- * - Menggunakan request URL dengan basis "https://" (meskipun header host mungkin berbeda).
- * - Meneruskan request ke target dengan header yang sudah difilter.
- * - Jika respons bertipe HTML, lakukan transformasi untuk peningkatan SEO.
- */
-async function handler(req: Request): Promise<Response> {
-  // Gunakan host dari header, namun force basis "https://"
-  const host = req.headers.get("host") || `localhost:${port}`;
-  const requestUrl = new URL(req.url, `https://${host}`);
-  // Gunakan URL permintaan sebagai canonical URL (akan dipastikan menggunakan https)
-  const canonicalUrl = requestUrl.href;
-
-  // Tangani preflight CORS (OPTIONS)
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  // Bentuk URL target berdasarkan path & query dari request
-  const targetUrl = new URL(target + requestUrl.pathname + requestUrl.search);
+  const browser = await launch({ headless: true }); // Jalankan dalam mode headless
+  const page = await browser.newPage();
 
   try {
-    const filteredHeaders = filterRequestHeaders(req.headers);
-    const targetResponse = await fetch(targetUrl.toString(), {
-      method: req.method,
-      headers: filteredHeaders,
-      body: req.body,
-    });
-    const contentType = targetResponse.headers.get("content-type") || "";
-    if (contentType.includes("text/html")) {
-      const htmlContent = await targetResponse.text();
-      const modifiedHtml = transformHTML(htmlContent, canonicalUrl);
-      const responseHeaders = new Headers(corsHeaders);
-      responseHeaders.set("Content-Type", "text/html; charset=utf-8");
-      return new Response(modifiedHtml, {
-        status: targetResponse.status,
-        statusText: targetResponse.statusText,
-        headers: responseHeaders,
-      });
-    } else {
-      const responseHeaders = new Headers(corsHeaders);
-      for (const [key, value] of targetResponse.headers) {
-        if (key.toLowerCase() === "content-encoding" || key.toLowerCase() === "content-length") continue;
-        responseHeaders.set(key, value);
-      }
-      return new Response(targetResponse.body, {
-        status: targetResponse.status,
-        statusText: targetResponse.statusText,
-        headers: responseHeaders,
-      });
-    }
+    // Navigasi ke URL
+    await page.goto(targetUrl, { waitUntil: 'domcontentloaded' });
+    console.log('[Puppeteer] Halaman awal dimuat.');
+
+    // Menunggu hingga elemen iframe muncul. Ini menandakan JavaScript sudah berjalan.
+    console.log('[Puppeteer] Menunggu elemen iframe muncul...');
+    await page.waitForSelector('iframe', { timeout: 60000 }); // Tunggu hingga 60 detik
+    console.log('[Puppeteer] Elemen iframe ditemukan atau timeout tercapai.');
+
+    // Beri sedikit waktu tambahan untuk rendering (opsional, terkadang membantu)
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    console.log('[Puppeteer] Menunggu 2 detik tambahan.');
+
+    // Mengambil konten HTML dari halaman setelah rendering
+    renderedHtmlContent = await page.content();
+    console.log('[Puppeteer] Konten HTML halaman berhasil diambil.');
+
   } catch (error) {
-    console.error("Error fetching target:", error);
-    return new Response("Internal Server Error", { status: 500 });
+    console.error(`[Puppeteer] Terjadi kesalahan saat mengambil halaman: ${error}`);
+    renderedHtmlContent = `<h1>Error rendering page</h1><p>${error.message}</p>`;
+  } finally {
+    // Menutup browser
+    await browser.close();
+    console.log('[Puppeteer] Browser ditutup.');
   }
 }
 
-console.log(`Server proxy dengan peningkatan SEO berjalan di port ${port}`);
-serve(handler, { port });
+// Fungsi handler untuk server HTTP
+async function handler(request: Request): Promise<Response> {
+  const pathname = new URL(request.url).pathname;
+
+  if (pathname === '/' && renderedHtmlContent !== null) {
+    // Sajikan konten HTML yang sudah diambil
+    return new Response(renderedHtmlContent, {
+      headers: {
+        'content-type': 'text/html; charset=utf-8',
+      },
+    });
+  } else if (renderedHtmlContent === null) {
+     // Beri tahu pengguna bahwa konten masih diambil
+     return new Response("Konten halaman sedang diambil oleh Puppeteer. Silakan coba refresh sebentar lagi.", {
+       status: 202, // Accepted
+       headers: {
+         'content-type': 'text/plain; charset=utf-8',
+       },
+     });
+  } else {
+    // Respon untuk path lain
+    return new Response('Halaman tidak ditemukan', { status: 404 });
+  }
+}
+
+// Jalankan fungsi fetch dan render, lalu mulai server
+async function main() {
+  await fetchAndRenderPage(); // Tunggu sampai Puppeteer selesai
+
+  if (renderedHtmlContent !== null) {
+     console.log(`[Server] Konten siap disajikan.`);
+  } else {
+     console.log(`[Server] Konten tidak berhasil diambil oleh Puppeteer.`);
+  }
+
+  console.log(`[Server] Server berjalan di http://localhost:${serverPort}/`);
+  await serve(handler, { port: serverPort });
+}
+
+main();
