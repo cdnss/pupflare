@@ -1,5 +1,5 @@
 FROM denoland/deno:latest
-
+ 
 # Set direktori kerja. Ini akan menjadi direktori root aplikasi kita.
 WORKDIR /app
 
