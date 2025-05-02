@@ -1,6 +1,6 @@
 FROM denoland/deno:latest
  
-# Set direktori kerja. Ini akan menjadi direktori root aplikasi kita.
+# Set direktori kerja. Ini akanenjadi direktori root aplikasi kita.
 WORKDIR /app
 
 # Instal dependensi sistem: git, dan ca-certificates
