@@ -5,7 +5,7 @@ import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 const TARGET_URL = "https://cloud.hownetwork.xyz/api.php?id=Lh09YywNWiYqPgQ4bgJmanBVPisnHRseGg5OfSIAb2p1TQ";
 
 // Port tempat proksi akan berjalan
-const PORT = 8000; // Anda bisa mengubah ini jika port 8000 sudah dipakai
+const PORT = 8080; // Anda bisa mengubah ini jika port 8000 sudah dipakai
 
 async function handler(request: Request): Promise<Response> {
   console.log(`Menerima permintaan: ${request.method} ${request.url}`);
