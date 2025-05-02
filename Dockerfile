@@ -1,6 +1,6 @@
 FROM denoland/deno:latest
  
-# Set direktori kerja. Ini akanenjadi direktori root aplikasi kita.
+# Set dienjadi direktori root aplikasi kita.
 WORKDIR /app
 
 # Instal dependensi sistem: git, dan ca-certificates
@@ -23,10 +23,10 @@ RUN rm -rf /app/.git
 
 
 # Cache dependensi Deno (opsional). Path script sekarang langsung di /app.
-# RUN deno cache /app/deno.ts
+RUN deno cache /app/deno.ts 
 
 # Expose port yang digunakan oleh server Deno Anda (sesuai dengan serve({ port: 8000 }))
-EXPOSE 8080
+EXPOSE 8080 
 
 # Perintah default untuk menjalankan script Deno dari direktori kerja /app
-CMD ["deno", "run", "-A", "--reload", "/app/deno.ts"]
+CMD ["deno", "run", "-A", "/app/deno.ts"]
