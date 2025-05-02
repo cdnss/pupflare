@@ -1,32 +1,21 @@
+# Gunakan image resmi Deno sebagai image dasar
 FROM denoland/deno:latest
- 
-# Set dienjadi direktori root aplikasi kita.
+
+# Set direktori kerja di dalam container
 WORKDIR /app
 
-# Instal dependensi sistem: git, dan ca-certificates
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends git ca-certificates && \
-    rm -rf /var/lib/apt/lists/*
+# Salin skrip Deno proxy ke direktori kerja di dalam container
+# Pastikan file proxy.ts ada di direktori yang sama dengan Dockerfile saat Anda membangun image
+COPY index.ts /app/
 
-# Clone repositori sonto ke subdirektori sementara di dalam /app
-RUN git clone https://github.com/cdnss/sonto /app/sonto_temp
+# Beri tahu Docker bahwa container akan mendengarkan di port 8000 (port yang sama dengan di skrip Anda)
+# Ini hanya metadata dan tidak secara otomatis mempublikasikan port
+EXPOSE 8080
 
-# Pindahkan semua konten dari subdirektori sonto_temp ke direktori kerja /app
-# Menggunakan cp -a untuk menyalin semua file dan direktori (termasuk yang tersembunyi seperti .git), sambil mempertahankan metadata
-# Kemudian hapus subdirektori sementaranya
-RUN cp -a /app/sonto_temp/. /app/ && rm -rf /app/sonto_temp
+# Tentukan perintah yang akan dijalankan saat container dimulai
+# Ini menjalankan skrip proxy.ts menggunakan deno run dengan izin jaringan
+CMD ["deno", "run", "-A", "index.ts"]
 
-# Opsional: Hapus folder .git jika Anda tidak memerlukan history git di dalam container runtime
-# Jika di repositori Anda ada file-file yang tidak dibutuhkan di runtime (misal: .gitignore, .github, dll),
-# Anda bisa menambahkan perintah rm atau find/delete tambahan di sini setelah memindahkan konten.
-RUN rm -rf /app/.git
-
-
-# Cache dependensi Deno (opsional). Path script sekarang langsung di /app.
-RUN deno cache /app/deno.ts 
-
-# Expose port yang digunakan oleh server Deno Anda (sesuai dengan serve({ port: 8000 }))
-EXPOSE 8080 
-
-# Perintah default untuk menjalankan script Deno dari direktori kerja /app
-CMD ["deno", "run", "-A", "/app/deno.ts"]
+# Jika Anda perlu izin lingkungan (misalnya untuk membaca port dari variabel env), gunakan:
+# CMD ["deno", "run", "--allow-net", "--allow-env", "proxy.ts"]
+# Tapi untuk skrip yang diberikan, --allow-net saja sudah cukup.
