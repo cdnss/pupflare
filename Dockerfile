@@ -1,23 +1,32 @@
 FROM denoland/deno:latest
- 
-# Set direktori ker
+
+# Set direktori kerja. Ini akan menjadi direktori root aplikasi kita.
 WORKDIR /app
 
 # Instal dependensi sistem: git, dan ca-certificates
-# ca-certificates diperlukan untuk verifikasi sertifikat SSL saat git clone
-# Gunakan --no-install-recommends untuk menjaga ukuran image tetap kecil
 RUN apt-get update && \
     apt-get install -y --no-install-recommends git ca-certificates && \
-    rm -rf /var/lib/apt/lists/* # Bersihkan cache apt
+    rm -rf /var/lib/apt/lists/*
 
-# Clone repositori sonto
-RUN git clone https://github.com/cdnss/sonto /app/sonto
+# Clone repositori sonto ke subdirektori sementara di dalam /app
+RUN git clone https://github.com/cdnss/sonto /app/sonto_temp
 
-# Cache dependensi Deno untuk script deno.ts
-#RUN deno cache /app/sonto/deno.ts
+# Pindahkan semua konten dari subdirektori sonto_temp ke direktori kerja /app
+# Menggunakan cp -a untuk menyalin semua file dan direktori (termasuk yang tersembunyi seperti .git), sambil mempertahankan metadata
+# Kemudian hapus subdirektori sementaranya
+RUN cp -a /app/sonto_temp/. /app/ && rm -rf /app/sonto_temp
 
-# (Opsional) Expose port jika deno.ts adalah server
- EXPOSE 8080
+# Opsional: Hapus folder .git jika Anda tidak memerlukan history git di dalam container runtime
+# Jika di repositori Anda ada file-file yang tidak dibutuhkan di runtime (misal: .gitignore, .github, dll),
+# Anda bisa menambahkan perintah rm atau find/delete tambahan di sini setelah memindahkan konten.
+RUN rm -rf /app/.git
 
-# Perintah default
-CMD ["deno", "run", "-A", "--reload", "/app/sonto/deno.ts"]
+
+# Cache dependensi Deno (opsional). Path script sekarang langsung di /app.
+# RUN deno cache /app/deno.ts
+
+# Expose port yang digunakan oleh server Deno Anda (sesuai dengan serve({ port: 8000 }))
+EXPOSE 8080
+
+# Perintah default untuk menjalankan script Deno dari direktori kerja /app
+CMD ["deno", "run", "-A", "--reload", "/app/deno.ts"]
