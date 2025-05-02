@@ -1,25 +1,23 @@
-# Menggunakan image Deno terbaru
 FROM denoland/deno:latest
-
-# Mengatur direktori kerja di dalam container
+ 
+# Set direktori ker
 WORKDIR /app
 
-# Menyalin script aplikasi Deno ke dalam direktori kerja
-COPY index.ts .
+# Instal dependensi sistem: git, dan ca-certificates
+# ca-certificates diperlukan untuk verifikasi sertifikat SSL saat git clone
+# Gunakan --no-install-recommends untuk menjaga ukuran image tetap kecil
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends git ca-certificates && \
+    rm -rf /var/lib/apt/lists/* # Bersihkan cache apt
 
-# --- Menambahkan langkah instalasi Puppeteer ---
-# Perintah ini akan mengunduh executable browser (Chromium)
-# yang dibutuhkan Puppeteer saat image dibangun.
-# PUPPETEER_PRODUCT=chrome memberi preferensi/konfigurasi untuk produk 'chrome'.
-# -A memberikan semua izin (diperlukan untuk download dan instalasi).
-# --unstable diperlukan untuk beberapa API Deno yang digunakan oleh script instalasi.
-# Menggunakan versi Puppeteer yang sama dengan yang digunakan di script Anda.
-#RUN PUPPETEER_PRODUCT=chrome deno run -A --unstable-* https://deno.land/x/puppeteer@16.2.0/install.ts
-# -----------------------------------------------
+# Clone repositori sonto
+RUN git clone https://github.com/cdnss/sonto /app/sonto
 
-# Mengekspos port yang digunakan oleh aplikasi (jika aplikasi mendengarkan di port 8080)
-EXPOSE 8080
+# Cache dependensi Deno untuk script deno.ts
+#RUN deno cache /app/sonto/deno.ts
 
-# Perintah yang dijalankan saat container dimulai
-# -A memberikan semua izin ke script index.ts (sesuai dengan CMD asli Anda)
-CMD ["deno", "run", "-A", "index.ts"]
+# (Opsional) Expose port jika deno.ts adalah server
+ EXPOSE 8080
+
+# Perintah default
+CMD ["deno", "run", "-A", "--reload", "/app/sonto/deno.ts"]
